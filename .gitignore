@@ -1,2 +1,6 @@
 target
 Cargo.lock
+.sqlx
+uploads/**       # Ignore all files and dirs recursively
+!uploads/        # Keep root uploads folder
+!uploads/**/     # Keep all subdirectories
