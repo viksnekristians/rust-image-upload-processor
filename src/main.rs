@@ -13,6 +13,10 @@ use rand::{distributions::Alphanumeric, Rng};
 use image::ImageFormat;
 use sqlx::mysql::MySqlPool;
 use axum::extract::State;
+use serde::{Serialize, Deserialize};
+use redis::AsyncCommands;
+use serde_json;
+use redis::Commands;
 
 async fn handler() -> StatusCode {
     println!("Received request");
@@ -20,9 +24,12 @@ async fn handler() -> StatusCode {
     StatusCode::OK
 }
 
-async fn upload_image(State(db_pool): State<MySqlPool>, mut multipart: Multipart, tx: Arc<mpsc::Sender<ImagePostUploadJob>>) -> StatusCode {
+async fn upload_image(
+    State(db_pool): State<MySqlPool>,
+    redis_client: redis::Client,
+    mut multipart: Multipart,
+) -> StatusCode {
     while let Some(field) = multipart.next_field().await.unwrap() {
-        println!("Received field: {:?}", field);
         let field_name = field.name().unwrap_or("unnamed").to_string();
         let original_file_name = field.file_name().map(|name| name.to_string()).unwrap_or("unknown".to_string());
         let extension = field.file_name()
@@ -43,16 +50,13 @@ async fn upload_image(State(db_pool): State<MySqlPool>, mut multipart: Multipart
                     .collect::<String>(),
                 extension
             );
-            println!("Processing image: {} ({})", file_name, content_type);
+            println!("Processing image: {}", file_name);
             let data = field.bytes().await.unwrap();
             let format = image::guess_format(&data);
             match format {
                 Ok(fmt) => {
                     // Try to decode the image to ensure it's valid
-                    if image::load_from_memory_with_format(&data, fmt).is_ok() {
-                        println!("Valid image of format: {:?}", fmt);
-                        // You can now process or save the image
-                    } else {
+                    if !image::load_from_memory_with_format(&data, fmt).is_ok() {
                         println!("Invalid image data");
                         continue;
                     }
@@ -99,23 +103,22 @@ async fn upload_image(State(db_pool): State<MySqlPool>, mut multipart: Multipart
             .await
             .unwrap();
 
-            println!(
-                "Inserted file: id={:?}, file_name={:?}, directory={:?}, type={:?}, original_name={:?}, origin={:?}",
-                row.id, row.file_name, row.directory, row.r#type, row.original_name, row.origin
-            );
+            println!("Inserted file: {:?}", row.file_name);
 
             let job = ImagePostUploadJob {
                 id: row.id as usize,
                 file_name: file_name.clone(),
                 dir: dir.to_string(),
             };
-            tx.send(job).await.unwrap();
+            let job_json = serde_json::to_string(&job).unwrap();
+
+            let mut conn = redis_client.get_connection().unwrap();
+            conn.rpush::<_, _, ()>("image_jobs", job_json).unwrap();
         } else {
             println!("Ignoring non-image field: {}", field_name);
         }
     }
 
-    // Return HTTP 200 OK to the client after processing all fields
     StatusCode::OK
 }
 
@@ -125,18 +128,17 @@ struct Worker {
 }
 
 impl Worker {
-    fn start(id: usize, receiver: Arc<Mutex<mpsc::Receiver<ImagePostUploadJob>>>) -> Self {
+    fn start(id: usize, redis_client: redis::Client) -> Self {
         let thread = thread::spawn(move || {
             println!("[Worker {}] started", id);
+            let mut conn = redis_client.get_connection().unwrap();
             loop {
-                let job = {
-                    let mut rx = receiver.lock().unwrap();
-                    rx.blocking_recv()
-                };
-                if let Some(job) = job {
-                    println!("[Worker {}] Processing job: {} {}", id, job.dir, job.file_name);
+                let result: Option<(String, String)> = conn.blpop("image_jobs", 0.0).ok();
+                if let Some((_queue, job_json)) = result {
+                    let job: ImagePostUploadJob = serde_json::from_str(&job_json).unwrap();
+                    println!("[Worker {}] Processing job for: {}", id, job.file_name);
                     job.generate_thumbnail();
-                    println!("[Worker {}] Finished processing job: {}", id, job.file_name);
+                    println!("[Worker {}] Finished processing job for: {}", id, job.file_name);
                 } else {
                     println!("[Worker {}] No more jobs, exiting", id);
                     break;
@@ -147,7 +149,8 @@ impl Worker {
     }
 }
 
-struct ImagePostUploadJob {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ImagePostUploadJob {
     id: usize,
     file_name: String,
     dir: String,
@@ -193,14 +196,15 @@ async fn main() {
     let (tx, rx) = mpsc::channel::<ImagePostUploadJob>(100);
     let tx = Arc::new(tx);
     let rx = Arc::new(Mutex::new(rx));
+    let redis_url = "redis://127.0.0.1:6379/";
+    let redis_client = redis::Client::open(redis_url).unwrap();
 
     // Start N workers - constant?
     let worker_count = 4;
     let mut workers = Vec::with_capacity(worker_count);
 
     for i in 0..worker_count {
-        let rx = rx.clone();
-        workers.push(Worker::start(i, rx));
+        workers.push(Worker::start(i, redis_client.clone()));
     }
 
     let app = Router::new()
@@ -208,7 +212,7 @@ async fn main() {
         .route("/upload", post(
             {
                 let tx = tx.clone();
-                move |State(db_pool): State<MySqlPool>, multipart: Multipart| upload_image(State(db_pool), multipart, tx.clone())
+                move |State(db_pool): State<MySqlPool>, multipart: Multipart| upload_image(State(db_pool), redis_client.clone(), multipart)
             }
         )).with_state(db_pool.clone());
 
