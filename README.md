@@ -91,7 +91,7 @@ A Rust project for uploading images, saving them to disk, storing metadata in a 
 
 ## Logging
 
-- specific logging is done by sending messages using mpsc channel from worker threads and collecting, logging them using logger thread.
+- Specific logging is done by sending messages using mpsc channel from worker threads and collecting, logging them using logger thread. 
 
 ---
 
