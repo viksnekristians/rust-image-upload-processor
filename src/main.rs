@@ -19,6 +19,7 @@ use sqlx::mysql::MySqlPool;
 use axum::extract::State;
 
 const WORKER_COUNT: usize = 4;
+const LOG_CHANNEL_SIZE: usize = 100;
 
 #[tokio::main]
 async fn main() {
@@ -28,7 +29,7 @@ async fn main() {
     let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
     let redis_client = redis::Client::open(redis_url).unwrap();
 
-    let (log_sender, log_receiver) = mpsc::channel::<String>(100);
+    let (log_sender, log_receiver) = mpsc::channel::<String>(LOG_CHANNEL_SIZE);
     let log_sender = Arc::new(log_sender);
     let log_receiver = Arc::new(Mutex::new(log_receiver));
 
