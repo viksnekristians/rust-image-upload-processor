@@ -91,7 +91,7 @@ A Rust project for uploading images, saving them to disk, storing metadata in a 
 
 ## Notes
 
-- The project uses Axum for HTTP, SQLx for MySQL, and the `image` crate for image processing.
+- The project uses Axum for HTTP, SQLx for MySQL and Redis
 - The worker system processes jobs for thumbnail generation after upload.
 - The database pool and job queue are managed as shared state in the application.
 - `.env` is used for configuration, and `cargo-dotenv` ensures environment variables are loaded for both running and preparing SQLx queries.
