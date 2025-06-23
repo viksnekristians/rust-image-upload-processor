@@ -2,10 +2,12 @@ use serde::{Serialize, Deserialize};
 use serde_json;
 use redis::Commands;
 use std::thread;
+use tokio::sync::mpsc;
+use std::sync::Arc;
 use crate::ImagePostUploadJob;
 
 pub trait Worker {
-    fn start(id: usize) -> Self;
+    fn start(id: usize, log_sender: Arc<mpsc::Sender<String>>) -> Self;
     fn join(self);
 }
 
@@ -15,7 +17,7 @@ pub struct ImageWorker {
 }
 
 impl Worker for ImageWorker {
-    fn start(id: usize) -> Self {
+    fn start(id: usize, log_sender: Arc<mpsc::Sender<String>>) -> Self {
         let thread = thread::spawn(move || {
             println!("[Worker {}] started", id);
             let redis_client = redis::Client::open(
@@ -28,6 +30,7 @@ impl Worker for ImageWorker {
                     let job: ImagePostUploadJob = serde_json::from_str(&job_json).unwrap();
                     println!("[Worker {}] Processing job for: {}", id, job.file_name);
                     job.generate_thumbnail();
+                    log_sender.blocking_send(format!("Worker {} processed job for: {}", id, job.file_name)).unwrap();
                     println!("[Worker {}] Finished processing job for: {}", id, job.file_name);
                 } else {
                     println!("[Worker {}] No more jobs, exiting", id);

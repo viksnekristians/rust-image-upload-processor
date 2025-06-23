@@ -1,6 +1,7 @@
 mod jobs;
 mod workers;
 mod handlers;
+mod logger;
 
 use jobs::ImagePostUploadJob;
 use workers::ImageWorker;
@@ -27,14 +28,15 @@ async fn main() {
     let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
     let redis_client = redis::Client::open(redis_url).unwrap();
 
-    let (tx, rx) = mpsc::channel::<String>(100);
-    let tx = Arc::new(tx);
-    let rx = Arc::new(Mutex::new(rx));
+    let (log_sender, log_receiver) = mpsc::channel::<String>(100);
+    let log_sender = Arc::new(log_sender);
+    let log_receiver = Arc::new(Mutex::new(log_receiver));
 
+    logger::start_logger(log_receiver.clone());
     let mut workers = Vec::with_capacity(WORKER_COUNT);
 
     for i in 0..WORKER_COUNT {
-        workers.push(ImageWorker::start(i));
+        workers.push(ImageWorker::start(i, log_sender.clone()));
     }
 
     let app = Router::new()

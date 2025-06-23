@@ -2,6 +2,7 @@
 target
 Cargo.lock
 .sqlx
+log.txt
 # Ignore all files in uploads and its subdirectories
 uploads/*
 !uploads/.gitkeep
