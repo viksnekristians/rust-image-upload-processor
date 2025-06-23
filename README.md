@@ -25,10 +25,11 @@ A Rust project for uploading images, saving them to disk, storing metadata in a 
         FLUSH PRIVILEGES;
         ```
 
-3. **Create a `.env` file in the project root**
+3. **Create a `.env` file in the project root and define `DATABASE_URL` and `REDIS_URL`**
 
     ```env
     DATABASE_URL=mysql://rustuser:rustpass@localhost/image_processor
+    ...
     ```
 
 4. **Install cargo-dotenv and sqlx-cli**
