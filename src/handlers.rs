@@ -48,7 +48,6 @@ pub async fn upload_image(
             let format = image::guess_format(&data);
             match format {
                 Ok(fmt) => {
-                    // Try to decode the image to ensure it's valid
                     if !image::load_from_memory_with_format(&data, fmt).is_ok() {
                         println!("Invalid image data");
                         continue;
@@ -81,7 +80,6 @@ pub async fn upload_image(
             .await
             .unwrap();
 
-            // Get the inserted id (for MySQL)
             let id = rec.last_insert_id();
 
             let row = sqlx::query!(
@@ -90,7 +88,7 @@ pub async fn upload_image(
                 FROM files
                 WHERE id = ?
                 "#,
-                id as i64 // Make sure the type matches your DB schema
+                id as i64 
             )
             .fetch_one(&db_pool)
             .await
