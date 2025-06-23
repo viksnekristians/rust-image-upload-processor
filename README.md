@@ -60,7 +60,7 @@ A Rust project for uploading images, saving them to disk, storing metadata in a 
     cargo dotenv sqlx prepare
     ```
 
-7. **Prepare SQLx query cache using dotenv**
+7. **Start Redis server locally or using Docker**
 
     ```bash
     docker exec -it redis-server redis-cli
@@ -91,7 +91,8 @@ A Rust project for uploading images, saving them to disk, storing metadata in a 
 
 ## Logging
 
-- Specific logging is done by sending messages using mpsc channel from worker threads and collecting, logging them using logger thread. 
+- Specific logging is available by sending messages using mpsc channel from worker threads and collecting, logging them using logger thread. 
+- This can be adjusted and used according to needs.
 
 ---
 
