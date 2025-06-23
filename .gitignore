@@ -2,6 +2,9 @@
 target
 Cargo.lock
 .sqlx
-uploads/**       # Ignore all files and dirs recursively
-!uploads/        # Keep root uploads folder
-!uploads/**/     # Keep all subdirectories
+# Ignore all files in uploads and its subdirectories
+uploads/*
+!uploads/.gitkeep
+# Ignore all files in uploads/thumbnails and its subdirectories
+uploads/thumbnails/*
+!uploads/thumbnails/.gitkeep
